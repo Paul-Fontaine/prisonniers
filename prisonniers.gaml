@@ -12,6 +12,8 @@ global {
 	
 	int taille_carre <- 200;
 	int taille_prisonniers <- 2;
+	float distance_perception <- 5.0;
+	int cooldown_duration <- 20;
 	
 	int nb_traitres <- 10;
 	rgb color_traitres <- #red;
@@ -34,13 +36,58 @@ global {
 species prisonnier skills: [moving] {
 	rgb color;
 	float amplitude <- 30.0;
+	int cooldown <- 0 min: 0 max: cooldown_duration;
+	bool can_duel <- true;
+	list<prisonnier> adversaires_potentiels <- [];
+	int points <- 0;
 	
 	reflex deplacement {
+		write(heading);
 		do wander amplitude: amplitude;
+		adversaires_potentiels <- agents_at_distance(distance_perception) where (each is prisonnier);
+		adversaires_potentiels <- adversaires_potentiels where (each.can_duel);
+		cooldown <- cooldown - 1;
+		can_duel <- cooldown = 0;
 	}
 	
 	aspect base {
-		draw circle(2) color: color;
+		float taille <- min(2.0, distance_perception);
+		rgb color_used;
+		if can_duel {color_used <- color;} else {color_used <- #black;}
+		
+		draw circle(distance_perception) color: rgb(color, 45);
+		draw circle(taille) color: color_used;
+	}
+	
+	reflex duel when: can_duel and length(adversaires_potentiels) > 0 {
+		prisonnier adversaire <- adversaires_potentiels[0];
+		if adversaire.location.x < self.location.x {
+			return;
+		}
+		if adversaire.location.x = self.location.x {
+			if adversaire.location.y < self.location.y {
+				return;
+			}
+		}
+		
+		write(""+self+ " creates a duel");
+		int random_choice <- rnd(2);
+		prisonnier gagnant;
+		prisonnier perdant;
+		if random_choice = 0 {gagnant <- self; perdant <- adversaire;} else {gagnant <- adversaire; perdant <- self;}
+
+        gagnant.points <- gagnant.points + 1;
+        write(""+gagnant + " won against " + perdant);
+        
+        ask gagnant {heading <- heading - 90;}
+        ask perdant {heading <- heading + 90;}
+	        
+	    cooldown <- cooldown_duration;
+	    can_duel <- false;
+	    ask adversaire {
+	    	cooldown <- cooldown_duration;
+	    	can_duel <- false;
+	    }
 	}
 }
 
@@ -65,7 +112,7 @@ experiment prisonniers type: gui {
 	float minimum_cycle_duration <- 0.05#s;
 	
 	output {
-		display main_display type:2d{
+		display main_display type:2d {
 			species traitre aspect:base;
 			species cooperateur aspect:base;
 		}
@@ -86,6 +133,21 @@ experiment prisonniers type: gui {
 		max: 10 
 		category: "1. Global Environment";
 
+	parameter "Distance de perception" 
+		var: distance_perception <- 5.0
+		type: float 
+		min: 0.1 
+		max: 10.0 
+		category: "1. Global Environment";
+	
+	parameter "Durée cooldown (nb de cycles)" 
+		var: cooldown_duration <- 20
+		type: int 
+		min: 1 
+		max: 20 
+		category: "1. Global Environment";
+
+	
 
 	// --- Traitors (Traitres) Parameters ---
 	parameter "Nombre" 
